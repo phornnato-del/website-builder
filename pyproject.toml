@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "webbuilder-api"
+version = "0.1.0"
+description = "FastAPI service for the WebBuilder platform"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi==0.162.0",
+    "argon2-cffi==25.1.0",
+    "email-validator==2.3.0",
+    "pydantic-settings==2.16.2",
+    "pymongo==4.19.0",
+    "python-multipart==0.0.32",
+    "slowapi==0.1.10",
+    "uvicorn[standard]==0.54.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx2==2.16.0",
+    "pytest==9.2.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
