@@ -36,6 +36,7 @@ class SiteBlock(BaseModel):
         "button",
         "navbar",
         "card",
+        "imageCard",
         "columns",
         "spacer",
         "divider",
@@ -52,11 +53,20 @@ class SiteBlock(BaseModel):
     color: str = Field(pattern=r"^(#[0-9a-fA-F]{6}|transparent)$")
     backgroundColor: str = Field(pattern=r"^(#[0-9a-fA-F]{6}|transparent)$")
     url: str = Field(max_length=2048)
+    fontFamily: Literal[
+        "Arial",
+        "Georgia",
+        "Times New Roman",
+        "Courier New",
+        "Verdana",
+        "Trebuchet MS",
+    ] = "Arial"
+    fontSize: int = Field(default=16, ge=8, le=96)
     images: list[str] = Field(default_factory=list, max_length=3)
     navItems: list[SiteNavItem] | None = Field(default=None, max_length=10)
 
     @model_validator(mode="after")
-    def validate_map_url(self) -> "SiteBlock":
+    def validate_embedded_urls(self) -> "SiteBlock":
         if self.type == "map" and self.url:
             iframe = re.match(r"^\s*<iframe\b([^>]*)>", self.url, flags=re.IGNORECASE)
             if iframe:
@@ -77,6 +87,12 @@ class SiteBlock(BaseModel):
                 or parsed.password is not None
             ):
                 raise ValueError("Map iframe URLs must use HTTPS and cannot include credentials.")
+        if self.type == "imageCard" and self.url:
+            if re.fullmatch(r"/api/images/[a-f0-9]{24}", self.url, flags=re.IGNORECASE):
+                return self
+            parsed = urlsplit(self.url)
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+                raise ValueError("Card image URLs must use http(s) or a saved image URL.")
         return self
 
     @field_validator("images")

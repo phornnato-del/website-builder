@@ -498,6 +498,118 @@ def test_site_accepts_https_map_embeds_and_rejects_unsafe_urls(monkeypatch) -> N
     assert all(response.status_code == 422 for response in unsafe_responses)
 
 
+def test_site_accepts_image_cards_and_rejects_unsafe_card_images(monkeypatch) -> None:
+    with _client(monkeypatch) as client:
+        registered = client.post(
+            "/api/auth/register",
+            headers={"Origin": FRONTEND_ORIGIN},
+            json={"email": "builder@example.com", "password": "a-very-long-password"},
+        )
+        headers = {
+            "Origin": FRONTEND_ORIGIN,
+            "X-CSRF-Token": registered.json()["csrf_token"],
+        }
+        block = {
+            "id": "image-card",
+            "type": "imageCard",
+            "text": "Card title\nA short description.",
+            "x": 50,
+            "y": 50,
+            "width": 320,
+            "height": 300,
+            "color": "#1e293b",
+            "backgroundColor": "#ffffff",
+            "url": "/api/images/507f1f77bcf86cd799439011",
+        }
+        saved = client.put(
+            "/api/sites/image-cards",
+            headers=headers,
+            json={
+                "blocks": [block],
+                "page_width": 1200,
+                "page_height": 900,
+                "canvas_color": "#ffffff",
+            },
+        )
+        unsafe = client.put(
+            "/api/sites/image-cards",
+            headers=headers,
+            json={
+                "blocks": [{**block, "url": "javascript:alert(1)"}],
+                "page_width": 1200,
+                "page_height": 900,
+                "canvas_color": "#ffffff",
+            },
+        )
+
+    assert saved.status_code == 200
+    assert saved.json()["blocks"][0]["type"] == "imageCard"
+    assert unsafe.status_code == 422
+
+
+def test_site_persists_safe_font_settings_and_rejects_invalid_values(monkeypatch) -> None:
+    with _client(monkeypatch) as client:
+        registered = client.post(
+            "/api/auth/register",
+            headers={"Origin": FRONTEND_ORIGIN},
+            json={"email": "builder@example.com", "password": "a-very-long-password"},
+        )
+        headers = {
+            "Origin": FRONTEND_ORIGIN,
+            "X-CSRF-Token": registered.json()["csrf_token"],
+        }
+        block = {
+            "id": "fonted-heading",
+            "type": "heading",
+            "text": "Styled heading",
+            "x": 50,
+            "y": 30,
+            "width": 440,
+            "height": 84,
+            "color": "#172554",
+            "backgroundColor": "transparent",
+            "url": "",
+            "fontFamily": "Georgia",
+            "fontSize": 32,
+        }
+        saved = client.put(
+            "/api/sites/fonts",
+            headers=headers,
+            json={
+                "blocks": [block],
+                "page_width": 1200,
+                "page_height": 900,
+                "canvas_color": "#ffffff",
+            },
+        )
+        invalid_font = client.put(
+            "/api/sites/fonts",
+            headers=headers,
+            json={
+                "blocks": [{**block, "fontFamily": "Comic Sans"}],
+                "page_width": 1200,
+                "page_height": 900,
+                "canvas_color": "#ffffff",
+            },
+        )
+        invalid_size = client.put(
+            "/api/sites/fonts",
+            headers=headers,
+            json={
+                "blocks": [{**block, "fontSize": 200}],
+                "page_width": 1200,
+                "page_height": 900,
+                "canvas_color": "#ffffff",
+            },
+        )
+
+    assert saved.status_code == 200
+    assert saved.json()["blocks"][0]["fontFamily"] == "Georgia"
+    assert saved.json()["blocks"][0]["fontSize"] == 32
+    assert invalid_font.status_code == 422
+    assert invalid_size.status_code == 422
+
+
 def test_site_rejects_duplicate_pages_and_missing_navigation_targets(monkeypatch) -> None:
     with _client(monkeypatch) as client:
         registered = client.post(
