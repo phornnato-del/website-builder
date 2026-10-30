@@ -177,6 +177,18 @@ def _site_response(site: dict[str, Any]) -> PublishedSite:
     )
 
 
+@router.get("/", response_model=list[PublishedSite])
+async def list_sites(
+    request: Request,
+    session_data: Annotated[dict[str, Any], Depends(_require_session)],
+) -> list[PublishedSite]:
+    collection = request.app.state.database.sites
+    cursor = collection.find({"owner_id": session_data["user"]["_id"]}).sort(
+        "slug", 1
+    )
+    return [_site_response(site) async for site in cursor]
+
+
 @router.put("/{slug}", response_model=PublishedSite)
 async def save_site(
     slug: str,
@@ -229,3 +241,23 @@ async def get_site(slug: str, request: Request) -> PublishedSite:
             detail="Website not found.",
         )
     return _site_response(site)
+
+
+@router.delete("/{slug}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_site(
+    slug: str,
+    request: Request,
+    session_data: Annotated[dict[str, Any], Depends(_require_session)],
+) -> None:
+    _validate_slug(slug)
+    _require_same_origin(request)
+    _require_csrf_token(request, session_data["session"])
+
+    result = await request.app.state.database.sites.delete_one(
+        {"slug": slug, "owner_id": session_data["user"]["_id"]}
+    )
+    if result.deleted_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Website not found.",
+        )

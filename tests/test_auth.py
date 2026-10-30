@@ -361,6 +361,7 @@ def test_site_save_and_public_read(monkeypatch) -> None:
             json=updated_design,
         )
         published = client.get("/api/sites/my-site")
+        history = client.get("/api/sites/")
 
     assert saved.status_code == 200
     assert saved.json()["slug"] == "my-site"
@@ -381,6 +382,84 @@ def test_site_save_and_public_read(monkeypatch) -> None:
         "https://example.com/second.png",
     ]
     assert published.json()["animation"] == "rise"
+    assert history.status_code == 200
+    assert [site["slug"] for site in history.json()] == ["my-site"]
+
+
+def test_site_history_requires_an_authenticated_user(monkeypatch) -> None:
+    with _client(monkeypatch) as client:
+        response = client.get("/api/sites/")
+
+    assert response.status_code == 401
+
+
+def test_site_history_only_returns_sites_owned_by_signed_in_user(monkeypatch) -> None:
+    with _client(monkeypatch) as client:
+        first_user = client.post(
+            "/api/auth/register",
+            headers={"Origin": FRONTEND_ORIGIN},
+            json={"email": "first@example.com", "password": "a-very-long-password"},
+        )
+        design = {
+            "blocks": [],
+            "page_width": 1200,
+            "page_height": 900,
+            "canvas_color": "#ffffff",
+        }
+        saved = client.put(
+            "/api/sites/first-site",
+            headers={
+                "Origin": FRONTEND_ORIGIN,
+                "X-CSRF-Token": first_user.json()["csrf_token"],
+            },
+            json=design,
+        )
+        second_user = client.post(
+            "/api/auth/register",
+            headers={"Origin": FRONTEND_ORIGIN},
+            json={"email": "second@example.com", "password": "a-very-long-password"},
+        )
+        history = client.get("/api/sites/")
+
+    assert saved.status_code == 200
+    assert second_user.status_code == 201
+    assert history.status_code == 200
+    assert history.json() == []
+
+
+def test_site_delete_requires_owner_and_csrf_token(monkeypatch) -> None:
+    with _client(monkeypatch) as client:
+        owner = client.post(
+            "/api/auth/register",
+            headers={"Origin": FRONTEND_ORIGIN},
+            json={"email": "owner@example.com", "password": "a-very-long-password"},
+        )
+        design = {
+            "blocks": [],
+            "page_width": 1200,
+            "page_height": 900,
+            "canvas_color": "#ffffff",
+        }
+        saved = client.put(
+            "/api/sites/owned-site",
+            headers={
+                "Origin": FRONTEND_ORIGIN,
+                "X-CSRF-Token": owner.json()["csrf_token"],
+            },
+            json=design,
+        )
+        deleted = client.delete(
+            "/api/sites/owned-site",
+            headers={
+                "Origin": FRONTEND_ORIGIN,
+                "X-CSRF-Token": owner.json()["csrf_token"],
+            },
+        )
+        missing_after_delete = client.get("/api/sites/owned-site")
+
+    assert saved.status_code == 200
+    assert deleted.status_code == 204
+    assert missing_after_delete.status_code == 404
 
 
 def test_site_rejects_carousels_with_more_than_three_or_unsafe_images(monkeypatch) -> None:
