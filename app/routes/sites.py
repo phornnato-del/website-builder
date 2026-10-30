@@ -32,6 +32,7 @@ class SiteBlock(BaseModel):
         "heading",
         "text",
         "image",
+        "map",
         "button",
         "navbar",
         "card",
@@ -53,6 +54,30 @@ class SiteBlock(BaseModel):
     url: str = Field(max_length=2048)
     images: list[str] = Field(default_factory=list, max_length=3)
     navItems: list[SiteNavItem] | None = Field(default=None, max_length=10)
+
+    @model_validator(mode="after")
+    def validate_map_url(self) -> "SiteBlock":
+        if self.type == "map" and self.url:
+            iframe = re.match(r"^\s*<iframe\b([^>]*)>", self.url, flags=re.IGNORECASE)
+            if iframe:
+                source = re.search(
+                    r"\bsrc\s*=\s*([\"'])(.*?)\1",
+                    iframe.group(1),
+                    flags=re.IGNORECASE,
+                )
+                if source is None:
+                    raise ValueError("Map iframe HTML must include a src URL.")
+                self.url = source.group(2).replace("&amp;", "&")
+
+            parsed = urlsplit(self.url)
+            if (
+                parsed.scheme != "https"
+                or not parsed.netloc
+                or parsed.username is not None
+                or parsed.password is not None
+            ):
+                raise ValueError("Map iframe URLs must use HTTPS and cannot include credentials.")
+        return self
 
     @field_validator("images")
     @classmethod

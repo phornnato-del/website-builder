@@ -437,6 +437,67 @@ def test_site_rejects_carousels_with_more_than_three_or_unsafe_images(monkeypatc
     assert unsafe.status_code == 422
 
 
+def test_site_accepts_https_map_embeds_and_rejects_unsafe_urls(monkeypatch) -> None:
+    with _client(monkeypatch) as client:
+        registered = client.post(
+            "/api/auth/register",
+            headers={"Origin": FRONTEND_ORIGIN},
+            json={"email": "builder@example.com", "password": "a-very-long-password"},
+        )
+        headers = {
+            "Origin": FRONTEND_ORIGIN,
+            "X-CSRF-Token": registered.json()["csrf_token"],
+        }
+        block = {
+            "id": "map",
+            "type": "map",
+            "text": "Find us",
+            "x": 50,
+            "y": 50,
+            "width": 640,
+            "height": 360,
+            "color": "#1e293b",
+            "backgroundColor": "#ffffff",
+            "url": (
+                '<iframe src="https://www.google.com/maps/embed?pb=example'
+                '&amp;hl=en" width="600" height="450"></iframe>'
+            ),
+        }
+        saved = client.put(
+            "/api/sites/maps",
+            headers=headers,
+            json={
+                "blocks": [block],
+                "page_width": 1200,
+                "page_height": 900,
+                "canvas_color": "#ffffff",
+            },
+        )
+        unsafe_responses = [
+            client.put(
+                "/api/sites/maps",
+                headers=headers,
+                json={
+                    "blocks": [{**block, "url": url}],
+                    "page_width": 1200,
+                    "page_height": 900,
+                    "canvas_color": "#ffffff",
+                },
+            )
+            for url in (
+                "http://maps.example.com/embed",
+                "javascript:alert(1)",
+                "https://user:password@maps.example.com/embed",
+            )
+        ]
+
+    assert saved.status_code == 200
+    assert saved.json()["blocks"][0]["url"] == (
+        "https://www.google.com/maps/embed?pb=example&hl=en"
+    )
+    assert all(response.status_code == 422 for response in unsafe_responses)
+
+
 def test_site_rejects_duplicate_pages_and_missing_navigation_targets(monkeypatch) -> None:
     with _client(monkeypatch) as client:
         registered = client.post(
